@@ -349,8 +349,9 @@
     }
   });
 
-  // 日記データのリアルタイム読み込み＆一覧表示（閲覧機能）
+// 日記データのリアルタイム読み込み＆一覧表示（閲覧機能）
   function loadDiaries(uid) {
+    // Firestoreエラーを防ぐため、whereのみ指定（orderByを削除）
     const q = query(
       collection(db, 'diaries'),
       where('uid', '==', uid)
@@ -364,7 +365,7 @@
         return;
       }
 
-      // 取得データを配列にして日時順にソート（新しい投稿が上）
+      // 取得したデータをJavaScript側で新しい順に並び替え
       const docs = [];
       snapshot.forEach(docSnap => {
         docs.push({ id: docSnap.id, ...docSnap.data() });
@@ -376,7 +377,7 @@
         return timeB - timeA;
       });
 
-      // 保存された日記カードを順に生成して表示
+      // 日記カードを画面に表示
       docs.forEach((data) => {
         const id = data.id;
         
@@ -405,7 +406,6 @@
       diaryContainer.innerHTML = '<p style="color:#ff7675;">データの読み込みに失敗しました。</p>';
     });
   }
-
   // 削除処理
   async function deleteDiary(docId) {
     if (confirm('この日記を削除しますか？')) {
