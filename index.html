@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホ対応（レスポンシブデザイン） -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>今日のひとこと日記・感情ログ</title>
+  
+  <style>
+    /* 全体のデザイン調整 */
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f7f6;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 500px;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.5rem;
+      color: #2c3e50;
+      margin-top: 0;
+    }
+    
+    /* ユーザープロファイル・ボタン */
+    .user-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #357ae8;
+    }
+    .btn-delete {
+      background-color: #e74c3c;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+    }
+    .btn-delete:hover {
+      background-color: #c0392b;
+    }
+
+    /* フォームUI */
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      font-size: 0.9rem;
+    }
+    select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+    textarea {
+      height: 80px;
+      resize: vertical;
+    }
+
+    /* 日記一覧リスト */
+    .diary-list {
+      margin-top: 25px;
+    }
+    .diary-card {
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+    .diary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: #777;
+      margin-bottom: 6px;
+    }
+    .diary-mood {
+      font-size: 1.2rem;
+    }
+    .diary-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>📖 今日のひとこと日記</h1>
+
+  <!-- 未ログイン時の表示 -->
+  <div id="login-section" style="text-align: center; padding: 20px 0;">
+    <p>日記を記録するにはログインしてください</p>
+    <button id="btn-login">Googleアカウントでログイン</button>
+  </div>
+
+  <!-- ログイン後の表示 -->
+  <div id="app-section" class="hidden">
+    <div class="user-info">
+      <span id="user-display">ようこそ！</span>
+      <button id="btn-logout" style="background-color: #888;">ログアウト</button>
+    </div>
+
+    <!-- 投稿フォーム -->
+    <div class="form-group">
+      <label for="mood">今日の気分</label>
+      <select id="mood">
+        <option value="😊 絶好調">😊 絶好調</option>
+        <option value="🙂 普通">🙂 普通</option>
+        <option value="😴 お疲れ">😴 お疲れ</option>
+        <option value="😭 悲しい">😭 悲しい</option>
+        <option value="🔥 やる気満々">🔥 やる気満々</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="diary-input">ひとことメモ</label>
+      <textarea id="diary-input" placeholder="今日あったことや感じたことを書こう..."></textarea>
+    </div>
+
+    <button id="btn-save" style="width: 100%;">日記を保存する</button>
+
+    <!-- 過去の日記一覧 -->
+    <div class="diary-list">
+      <h3>これまでの記録</h3>
+      <div id="diary-container">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK（v10 安定版のモジュール読み込み） -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { 
+    getAuth, 
+    GoogleAuthProvider, 
+    signInWithPopup, 
+    signOut, 
+    onAuthStateChanged 
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { 
+    getFirestore, 
+    collection, 
+    addDoc, 
+    query, 
+    where, 
+    orderBy, 
+    onSnapshot,
+    deleteDoc,
+    doc,
+    serverTimestamp 
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  // 1. Firebaseの設定（ご提示いただいた設定情報をそのまま使用）
+  const firebaseConfig = {
+    apiKey: "AIzaSyCrcn6zb_O1vbTP8JgS2ur9rSH3SPpY9NA",
+    authDomain: "kasige2.firebaseapp.com",
+    projectId: "kasige2",
+    storageBucket: "kasige2.firebasestorage.app",
+    messagingSenderId: "841565265329",
+    appId: "1:841565265329:web:fe5f5c43ba26611a3b3190"
+  };
+
+  // Firebase初期化
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  let currentUser = null;
+  let unsubscribeSnapshot = null; // リアルタイム受信解除用
+
+  // DOM要素の取得
+  const loginSection = document.getElementById('login-section');
+  const appSection = document.getElementById('app-section');
+  const btnLogin = document.getElementById('btn-login');
+  const btnLogout = document.getElementById('btn-logout');
+  const userDisplay = document.getElementById('user-display');
+  const btnSave = document.getElementById('btn-save');
+  const diaryInput = document.getElementById('diary-input');
+  const moodSelect = document.getElementById('mood');
+  const diaryContainer = document.getElementById('diary-container');
+
+  // 2. Googleログイン処理
+  btnLogin.addEventListener('click', () => {
+    signInWithPopup(auth, provider).catch(error => {
+      alert('ログインに失敗しました: ' + error.message);
+    });
+  });
+
+  // ログアウト処理
+  btnLogout.addEventListener('click', () => {
+    signOut(auth);
+  });
+
+  // 3. ログイン状態の監視（ページ読み込み時や状態変化時に自動実行）
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // ログイン中
+      currentUser = user;
+      userDisplay.textContent = `${user.displayName} さん`;
+      loginSection.classList.add('hidden');
+      appSection.classList.remove('hidden');
+      
+      // ユーザー固有のデータを読み込む
+      loadDiaries(user.uid);
+    } else {
+      // 未ログイン
+      currentUser = null;
+      loginSection.classList.remove('hidden');
+      appSection.classList.add('hidden');
+      if (unsubscribeSnapshot) unsubscribeSnapshot(); // 監視解除
+    }
+  });
+
+  // 4. データ保存処理（Firestoreへ追加）
+  btnSave.addEventListener('click', async () => {
+    const text = diaryInput.value.trim();
+    const mood = moodSelect.value;
+
+    if (!text) {
+      alert('ひとことメモを入力してください！');
+      return;
+    }
+
+    try {
+      // Firestoreの 'diaries' コレクションに保存
+      await addDoc(collection(db, 'diaries'), {
+        uid: currentUser.uid,        // 誰のデータかを判別するためのID
+        mood: mood,                  // 気分
+        text: text,                  // 日記の内容
+        createdAt: serverTimestamp() // 保存時のタイムスタンプ（並び替え用）
+      });
+
+      diaryInput.value = ''; // 入力欄をクリア
+    } catch (e) {
+      console.error('保存エラー:', e);
+      alert('保存に失敗しました');
+    }
+  });
+
+  // 5. データ読み込み処理（Firestoreから取得・リアルタイム反映）
+  function loadDiaries(uid) {
+    // ログイン中のユーザーのデータのみを、新しい順に取得するクエリ
+    const q = query(
+      collection(db, 'diaries'),
+      where('uid', '==', uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    // データの変化をリアルタイムで検知して描画
+    unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+      diaryContainer.innerHTML = '';
+
+      if (snapshot.empty) {
+        diaryContainer.innerHTML = '<p style="color:#888;">まだ日記がありません。最初の記録を書いてみよう！</p>';
+        return;
+      }
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const id = docSnap.id;
+        
+        // 日付のフォーマット処理
+        let dateStr = '保存中...';
+        if (data.createdAt) {
+          const d = data.createdAt.toDate();
+          dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        }
+
+        // カード要素を作成
+        const card = document.createElement('div');
+        card.className = 'diary-card';
+        card.innerHTML = `
+          <div class="diary-header">
+            <span>${dateStr}</span>
+            <button class="btn-delete" data-id="${id}">削除</button>
+          </div>
+          <div style="margin-bottom:6px;"><strong>${data.mood}</strong></div>
+          <p class="diary-text">${escapeHtml(data.text)}</p>
+        `;
+
+        // 削除ボタンのイベント追加
+        card.querySelector('.btn-delete').addEventListener('click', () => deleteDiary(id));
+
+        diaryContainer.appendChild(card);
+      });
+    }, (error) => {
+      console.error("読み込みエラー:", error);
+      diaryContainer.innerHTML = '<p style="color:red;">データの読み込みに失敗しました。</p>';
+    });
+  }
+
+  // 6. データ削除処理（加点要素）
+  async function deleteDiary(docId) {
+    if (confirm('この日記を削除しますか？')) {
+      try {
+        await deleteDoc(doc(db, 'diaries', docId));
+      } catch (e) {
+        alert('削除に失敗しました: ' + e.message);
+      }
+    }
+  }
+
+  // HTML特殊文字のエスケープ処理（セキュリティ対策）
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+</script>
+
+</body>
+</html>
