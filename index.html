@@ -6,7 +6,6 @@
   <title>カラフル感情日記 🌈</title>
   
   <style>
-    /* 全体のアニメーションと華やかなグラデーション背景 */
     body {
       font-family: 'Hiragino Sans', 'Segoe UI', sans-serif;
       background: linear-gradient(135deg, #a8edd9 0%, #fed6e3 100%);
@@ -38,7 +37,6 @@
       text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
     }
 
-    /* ログイン周りのポップなボタンデザイン */
     .user-info {
       display: flex;
       align-items: center;
@@ -92,13 +90,12 @@
       margin-top: 10px;
     }
 
-    /* フォーム周り */
     .form-card {
       background: #ffffff;
       border: 2px solid #ffeaa7;
       border-radius: 16px;
       padding: 16px;
-      margin-bottom: 25px;
+      margin-bottom: 20px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.03);
     }
 
@@ -132,14 +129,16 @@
       resize: vertical;
     }
 
-    /* 日記一覧（保存データの閲覧エリア） */
-    .diary-list-section h3 {
-      font-size: 1.1rem;
-      color: #6c5ce7;
-      margin-bottom: 12px;
+    #btn-toggle-list {
+      background: #6c5ce7;
+      color: white;
+      width: 100%;
+      box-shadow: 0 4px 12px rgba(108, 92, 231, 0.2);
+      margin-bottom: 15px;
       display: flex;
+      justify-content: center;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
     }
 
     .diary-card {
@@ -150,12 +149,6 @@
       margin-bottom: 14px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
       position: relative;
-      animation: fadeIn 0.3s ease-in-out;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
     }
 
     .diary-header {
@@ -197,7 +190,7 @@
     }
 
     .hidden {
-      display: none;
+      display: none !important;
     }
   </style>
 </head>
@@ -222,13 +215,18 @@
     <!-- 入力フォーム -->
     <div class="form-card">
       <div style="margin-bottom: 12px;">
-        <label for="mood">気分を選ぶ</label>
+        <label for="mood">気分を選ぶ（10種類）</label>
         <select id="mood">
           <option value="😊 絶好調！">😊 絶好調！</option>
           <option value="🙂 いい感じ">🙂 いい感じ</option>
+          <option value="😌 のんびり">😌 のんびり</option>
+          <option value="🔥 やる気全開">🔥 やる気全開</option>
+          <option value="🥳 最高！">🥳 最高！</option>
           <option value="😴 お疲れさま">😴 お疲れさま</option>
           <option value="😭 ちょっと悲しい">😭 ちょっと悲しい</option>
-          <option value="🔥 やる気全開">🔥 やる気全開</option>
+          <option value="😤 イライラ">😤 イライラ</option>
+          <option value="😨 不安・ドッキリ">😨 不安・ドッキリ</option>
+          <option value="🤤 お腹すいた">🤤 お腹すいた</option>
         </select>
       </div>
 
@@ -240,9 +238,11 @@
       <button id="btn-save">日記を保存する ✨</button>
     </div>
 
-    <!-- 過去の日記閲覧コーナー -->
-    <div class="diary-list-section">
-      <h3>📖 これまでの日記（保存データ）</h3>
+    <!-- 表示・非表示を切り替えるボタン -->
+    <button id="btn-toggle-list">📖 これまでの日記を見る</button>
+
+    <!-- 過去の日記エリア -->
+    <div id="diary-list-wrapper" class="hidden">
       <div id="diary-container">読み込み中...</div>
     </div>
   </div>
@@ -286,6 +286,7 @@
 
   let currentUser = null;
   let unsubscribeSnapshot = null;
+  let isListVisible = false;
 
   const loginSection = document.getElementById('login-section');
   const appSection = document.getElementById('app-section');
@@ -296,20 +297,30 @@
   const diaryInput = document.getElementById('diary-input');
   const moodSelect = document.getElementById('mood');
   const diaryContainer = document.getElementById('diary-container');
+  const btnToggleList = document.getElementById('btn-toggle-list');
+  const diaryListWrapper = document.getElementById('diary-list-wrapper');
 
-  // Googleログイン
+  btnToggleList.addEventListener('click', () => {
+    isListVisible = !isListVisible;
+    if (isListVisible) {
+      diaryListWrapper.classList.remove('hidden');
+      btnToggleList.textContent = '🙈 日記をかくす';
+    } else {
+      diaryListWrapper.classList.add('hidden');
+      btnToggleList.textContent = '📖 これまでの日記を見る';
+    }
+  });
+
   btnLogin.addEventListener('click', () => {
     signInWithPopup(auth, provider).catch(error => {
       alert('ログインエラー: ' + error.message);
     });
   });
 
-  // ログアウト
   btnLogout.addEventListener('click', () => {
     signOut(auth);
   });
 
-  // ログイン状態監視
   onAuthStateChanged(auth, (user) => {
     if (user) {
       currentUser = user;
@@ -325,7 +336,6 @@
     }
   });
 
-  // 日記保存
   btnSave.addEventListener('click', async () => {
     const text = diaryInput.value.trim();
     const mood = moodSelect.value;
@@ -349,9 +359,7 @@
     }
   });
 
-// 日記データのリアルタイム読み込み＆一覧表示（閲覧機能）
   function loadDiaries(uid) {
-    // Firestoreエラーを防ぐため、whereのみ指定（orderByを削除）
     const q = query(
       collection(db, 'diaries'),
       where('uid', '==', uid)
@@ -362,10 +370,10 @@
 
       if (snapshot.empty) {
         diaryContainer.innerHTML = '<p style="color:#b2bec3; text-align:center; padding:20px 0;">まだ日記がありません。<br>上のフォームから最初の投稿をしてみよう！✨</p>';
+        btnToggleList.textContent = '📖 これまでの日記を見る（0件）';
         return;
       }
 
-      // 取得したデータをJavaScript側で新しい順に並び替え
       const docs = [];
       snapshot.forEach(docSnap => {
         docs.push({ id: docSnap.id, ...docSnap.data() });
@@ -377,7 +385,10 @@
         return timeB - timeA;
       });
 
-      // 日記カードを画面に表示
+      if (!isListVisible) {
+        btnToggleList.textContent = `📖 これまでの日記を見る（${docs.length}件）`;
+      }
+
       docs.forEach((data) => {
         const id = data.id;
         
@@ -406,7 +417,7 @@
       diaryContainer.innerHTML = '<p style="color:#ff7675;">データの読み込みに失敗しました。</p>';
     });
   }
-  // 削除処理
+
   async function deleteDiary(docId) {
     if (confirm('この日記を削除しますか？')) {
       try {
